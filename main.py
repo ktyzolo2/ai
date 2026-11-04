@@ -1,11 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import yt_dlp
 import os
 import asyncio
 import edge_tts
 import base64
+import requests
 from openai import OpenAI
 
 app = FastAPI()
@@ -18,7 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# OpenAI API Key ដែលបានបញ្ចូលរួច
+# OpenAI API Key របស់អ្នក
 client = OpenAI(api_key="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")
 
 class VideoProcessRequest(BaseModel):
@@ -45,33 +45,26 @@ def process_video_voice(data: VideoProcessRequest):
         if not data.url.strip():
             raise HTTPException(status_code=400, detail="សូមបញ្ចូលលីងវីដេអូជាមុនសិន!")
 
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': 'temp_audio',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
-            'quiet': True,
-            'no_warnings': True
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([data.url])
+        # ប្រើប្រាស់ Public API ឥតគិតថ្លៃដើម្បីទាញយក Direct Audio Link ពីវីដេអូ
+        api_url = f"https://apis.davidcyriltech.name/tools/downloader?url={data.url}"
+        response = requests.get(api_url)
+        res_data = response.json()
 
-        actual_audio_path = "temp_audio.mp3"
-        if not os.path.exists(actual_audio_path):
-            for f in os.listdir("."):
-                if f.startswith("temp_audio"):
-                    actual_audio_path = f
-                    break
+        audio_download_url = None
+        if res_data and "success" in res_data:
+            # ទាញយក Link សម្លេងពី API មកប្រើប្រាស់
+            audio_download_url = res_data.get("audio") or res_data.get("dl_url")
+
+        if not audio_download_url:
+            raise HTTPException(status_code=400, detail="មិនអាចទាញយកសម្លេងពីលីងនេះបានទេ សូមព្យាយាមលីងផ្សេង!")
+
+        # ទាញយកไฟล์សម្លេង MP3 មកទុកក្នុង Server
+        audio_response = requests.get(audio_download_url)
+        with open(audio_file_path, "wb") as f:
+            f.write(audio_response.content)
 
         # ១. ផ្ញើ ፋይልសម្លេងទៅកាន់ OpenAI Whisper API
-        with open(actual_audio_path, "rb") as audio_file:
+        with open(audio_file_path, "rb") as audio_file:
             transcript_response = client.audio.transcriptions.create(
                 model="whisper-1",
                 file=audio_file
@@ -97,19 +90,19 @@ def process_video_voice(data: VideoProcessRequest):
         loop.close()
 
         if not audio_bytes:
-            raise HTTPException(status_code=500, detail="មិនអាចបង្កើតសំឡេង AI បានទេ")
+            raise HTTPException(status_code=500, detail="មិនអាចបង្កើតសំឡេង AI ได้ទេ")
 
         audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
 
-        if os.path.exists(actual_audio_path):
-            os.remove(actual_audio_path)
+        if os.path.exists(audio_file_path):
+            os.remove(audio_file_path)
 
         return {
             "success": True,
             "original_text": original_text,
             "translated_text": khmer_translation,
             "audio_base64": audio_base64,
-            "message": "បកប្រែនិងបង្កើតសំឡេង AI បានជោគជ័យ!"
+            "message": "បកប្រែនិងបង្កើតសំឡេង AI ได้ជោគជ័យ!"
         }
 
     except Exception as e:
