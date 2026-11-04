@@ -1,6 +1,5 @@
 fastapi
 uvicorn
-yt-dlp
 openai
 edge-tts
 requests
