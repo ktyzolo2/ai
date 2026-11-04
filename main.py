@@ -18,16 +18,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ដាក់ OpenAI API Key របស់អ្នកនៅទីនេះ (ជំនួសកន្លែង "YOUR_OPENAI_API_KEY")
-client = OpenAI(api_key="YOUR_OPENAI_API_KEY")
+# OpenAI API Key ដែលបានបញ្ចូលរួច
+client = OpenAI(api_key="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")
 
 class VideoProcessRequest(BaseModel):
     url: str
-    voice_type: str = "male"  # "male" (សំឡេងប្រុស) ឬ "female" (សំឡេងស្រី)
+    voice_type: str = "male"
 
 VOICE_MAP = {
-    "male": "km-KH-SamnangNeural",     # សំឡេងប្រុស ក្រាស់ ធម្មជាតិ
-    "female": "km-KH-SreymomNeural"   # សំឡេងស្រី ស្រទន់ ធម្មជាតិ
+    "male": "km-KH-SamnangNeural",     # សំឡេងប្រុស
+    "female": "km-KH-SreymomNeural"   # សំឡេងស្រី
 }
 
 async def generate_edge_tts(text: str, voice_name: str) -> bytes:
@@ -45,7 +45,6 @@ def process_video_voice(data: VideoProcessRequest):
         if not data.url.strip():
             raise HTTPException(status_code=400, detail="សូមបញ្ចូលលីងវីដេអូជាមុនសិន!")
 
-        # ១. ប្រើ yt-dlp ទាញយកសម្លេងពីគ្រប់លីងវីដេអូ (YouTube, TikTok, Facebook, etc.)
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': 'temp_audio',
@@ -54,7 +53,11 @@ def process_video_voice(data: VideoProcessRequest):
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
-            'quiet': True
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            'quiet': True,
+            'no_warnings': True
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -67,7 +70,7 @@ def process_video_voice(data: VideoProcessRequest):
                     actual_audio_path = f
                     break
 
-        # ២. ផ្ញើ ፋይልសម្លេងទៅកាន់ OpenAI Whisper API ដើម្បីដកស្រង់ជាអក្សរដើម
+        # ១. ផ្ញើ ፋይልសម្លេងទៅកាន់ OpenAI Whisper API
         with open(actual_audio_path, "rb") as audio_file:
             transcript_response = client.audio.transcriptions.create(
                 model="whisper-1",
@@ -75,7 +78,7 @@ def process_video_voice(data: VideoProcessRequest):
             )
         original_text = transcript_response.text
 
-        # ៣. ប្រើ GPT បកប្រែអត្ថបទនោះជាភាសាខ្មែរយ៉ាងរលូន
+        # ២. ប្រើ GPT បកប្រែជាភាសាខ្មែរ
         chat_response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -85,7 +88,7 @@ def process_video_voice(data: VideoProcessRequest):
         )
         khmer_translation = chat_response.choices[0].message.content
 
-        # ៤. បំលែងអត្ថបទខ្មែរទៅជាសំឡេង AI (Edge TTS)
+        # ៣. ប្រើ Edge TTS បំលែងជាសំឡេង AI
         voice_name = VOICE_MAP.get(data.voice_type, VOICE_MAP["male"])
         
         loop = asyncio.new_event_loop()
@@ -98,7 +101,6 @@ def process_video_voice(data: VideoProcessRequest):
 
         audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
 
-        # លុបไฟล์ชั่วคราวចេញដើម្បីសន្សំសំចៃទំហំ Server
         if os.path.exists(actual_audio_path):
             os.remove(actual_audio_path)
 
@@ -107,7 +109,7 @@ def process_video_voice(data: VideoProcessRequest):
             "original_text": original_text,
             "translated_text": khmer_translation,
             "audio_base64": audio_base64,
-            "message": "ដំណើរការបកប្រែនិងបង្កើតសំឡេង AI បានជោគជ័យ!"
+            "message": "បកប្រែនិងបង្កើតសំឡេង AI បានជោគជ័យ!"
         }
 
     except Exception as e:
@@ -118,4 +120,4 @@ def process_video_voice(data: VideoProcessRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=10000)
