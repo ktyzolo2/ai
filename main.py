@@ -1,37 +1,14 @@
 import os
-import cv2
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-
-def get_frame_from_video(video_path):
-    cap = cv2.VideoCapture(video_path)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
-    # យករូបភាពនៅចំកណ្តាលវីដេអូ (កុំយកស៊ុមដំបូងពេក ព្រោះអាចអត់ទាន់មានអក្សរ)
-    middle_frame = total_frames // 2
-    cap.set(cv2.CAP_PROP_POS_FRAMES, middle_frame)
-    
-    success, image = cap.read()
-    image_path = "temp_frame.jpg"
-    
-    if not success:
-        # បើកន្លែងកណ្តាលទាញមិនកើត ថយមកយកស៊ុមដំបូងវិញ
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        success, image = cap.read()
-        
-    if success:
-        cv2.imwrite(image_path, image)
-        
-    cap.release()
-    return image_path
 
 def extract_text_via_api(image_path):
     url = "https://api.ocr.space/parse/image"
     payload = {
         'isOverlayRequired': False,
-        'apikey': 'helloworld', 
-        'language': 'chs'       # ភាសាអក្សរចិនសាមញ្ញ
+        'apikey': 'helloworld', # អ្នកអាចប្តូរជា API Key ផ្ទាល់ខ្លួនរបស់អ្នកនៅពេលหลัง
+        'language': 'chs'       # ភាសាអក្សរចិនសាមញ្ញ (Chinese Simplified)
     }
     with open(image_path, 'rb') as f:
         files = {'file': f}
@@ -45,48 +22,49 @@ def extract_text_via_api(image_path):
             
     return ""
 
-async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
-    video = message.video or message.document
     
-    if not video:
-        await message.reply_text("សូមផ្ញើមកជាវីដេអូ!")
+    # ពិនិត្យមើលថាតើមានរូបភាព ឬ File រូបភាពដែរឬទេ
+    photo = message.photo
+    document = message.document
+    
+    if not photo and not document:
+        await message.reply_text("សូមផ្ញើមកជារូបភាព (Photo) ដើម្បីឱ្យខ្ញុំជួយអានអក្សរជូន!")
         return
 
-    if video.file_size and video.file_size > 20 * 1024 * 1024:
-        await message.reply_text("⚠️ វីដេអូនេះធំពេក! សូមផ្ញើវីដេអូដែលមានទំហំតិចជាង 20MB។")
-        return
-
-    await message.reply_text("⏳ កំពុងទាញយក និងអានអក្សរពីវីដេអូ សូមរង់ចាំបន្តិច...")
+    await message.reply_text("⏳ កំពុងអានអក្សរពីរូបភាព... សូមរង់ចាំបន្តិច។")
     
-    file = await context.bot.get_file(video.file_id)
-    video_path = "temp_video.mp4"
-    await file.download_to_drive(video_path)
+    # យក File ID របស់រូបភាពដែលមានគុណភាពខ្ពស់ជាងគេ
+    if photo:
+        file_obj = await context.bot.get_file(photo[-1].file_id)
+    else:
+        file_obj = await context.bot.get_file(document.file_id)
+        
+    image_path = "temp_image.jpg"
+    await file_obj.download_to_drive(image_path)
     
     try:
-        img_path = get_frame_from_video(video_path)
-        extracted_text = extract_text_via_api(img_path)
+        extracted_text = extract_text_via_api(image_path)
         
         if not extracted_text:
-            extracted_text = "រកមិនឃើញអក្សរច្បាស់លាស់នៅក្នុងវីដេអូនេះទេ។ (សូមព្យាយាមផ្ញើវីដេអូផ្សេងដែលអក្សរច្បាស់ជាង)"
+            extracted_text = "រកមិនឃើញអក្សរច្បាស់លាស់នៅក្នុងរូបភាពនេះទេ។"
             
         await message.reply_text(f"📄 **អក្សរដែលរកឃើញ៖**\n\n{extracted_text}")
         
-        if os.path.exists(img_path):
-            os.remove(img_path)
-            
     except Exception as e:
         await message.reply_text(f"⚠️ កំហុសឆ្គង: {str(e)}")
         
     finally:
-        if os.path.exists(video_path):
-            os.remove(video_path)
+        if os.path.exists(image_path):
+            os.remove(image_path)
 
 if __name__ == '__main__':
     TOKEN = "9186643956:AAGP-k8So23wqyApz12yCaMhGpLnYJCfw6k"
     
     app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video))
+    # ដូរ Filter មកទទួលយករូបភាព និង Document រូបភាពវិញ
+    app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_image))
     
-    print("🤖 Bot កំពុងដំណើរការ...")
+    print("🤖 Bot រូបភាពកំពុងដំណើរការ...")
     app.run_polling()
