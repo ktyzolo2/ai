@@ -18,7 +18,7 @@ def extract_text_via_api(image_path):
     payload = {
         'isOverlayRequired': False,
         'apikey': 'helloworld', 
-        'language': 'eng'       
+        'language': 'chs'       # កំណត់ជាភាសាអក្សរចិនសាមញ្ញ (Chinese Simplified)
     }
     with open(image_path, 'rb') as f:
         files = {'file': f}
@@ -37,9 +37,9 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("សូមផ្ញើមកជាវីដេអូ!")
         return
 
-    # ឆែកទំហំវីដេអូ (Telegram កំណត់ត្រឹម 20MB សម្រាប់ Bot ទាញយក)
+    # ឆែកទំហំវីដេអូកុំឱ្យលើសពី 20MB
     if video.file_size and video.file_size > 20 * 1024 * 1024:
-        await message.reply_text("⚠️ វីដេអូនេះធំពេក! សូមផ្ញើវីដេអូដែលមានទំហំតិចជាង 20MB (ឬវីដេអូខ្លីៗ)។")
+        await message.reply_text("⚠️ វីដេអូនេះធំពេក! សូមផ្ញើវីដេអូដែលមានទំហំតិចជាង 20MB។")
         return
 
     await message.reply_text("⏳ កំពុងទាញយក និងអានអក្សរពីវីដេអូ សូមរង់ចាំបន្តិច...")
