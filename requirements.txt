@@ -1,5 +1,3 @@
-fastapi
-uvicorn
-openai
-edge-tts
+python-telegram-bot
 requests
+opencv-python-headless
