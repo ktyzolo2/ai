@@ -6,10 +6,23 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filte
 
 def get_frame_from_video(video_path):
     cap = cv2.VideoCapture(video_path)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # យករូបភាពនៅចំកណ្តាលវីដេអូ (កុំយកស៊ុមដំបូងពេក ព្រោះអាចអត់ទាន់មានអក្សរ)
+    middle_frame = total_frames // 2
+    cap.set(cv2.CAP_PROP_POS_FRAMES, middle_frame)
+    
     success, image = cap.read()
     image_path = "temp_frame.jpg"
+    
+    if not success:
+        # បើកន្លែងកណ្តាលទាញមិនកើត ថយមកយកស៊ុមដំបូងវិញ
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        success, image = cap.read()
+        
     if success:
         cv2.imwrite(image_path, image)
+        
     cap.release()
     return image_path
 
@@ -18,7 +31,7 @@ def extract_text_via_api(image_path):
     payload = {
         'isOverlayRequired': False,
         'apikey': 'helloworld', 
-        'language': 'chs'       # កំណត់ជាភាសាអក្សរចិនសាមញ្ញ (Chinese Simplified)
+        'language': 'chs'       # ភាសាអក្សរចិនសាមញ្ញ
     }
     with open(image_path, 'rb') as f:
         files = {'file': f}
@@ -26,8 +39,11 @@ def extract_text_via_api(image_path):
     
     result = response.json()
     if result.get('ParsedResults'):
-        return result['ParsedResults'][0]['ParsedText']
-    return "រកមិនឃើញអក្សរទេ"
+        parsed_text = result['ParsedResults'][0]['ParsedText'].strip()
+        if parsed_text:
+            return parsed_text
+            
+    return ""
 
 async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -37,7 +53,6 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("សូមផ្ញើមកជាវីដេអូ!")
         return
 
-    # ឆែកទំហំវីដេអូកុំឱ្យលើសពី 20MB
     if video.file_size and video.file_size > 20 * 1024 * 1024:
         await message.reply_text("⚠️ វីដេអូនេះធំពេក! សូមផ្ញើវីដេអូដែលមានទំហំតិចជាង 20MB។")
         return
@@ -52,8 +67,8 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         img_path = get_frame_from_video(video_path)
         extracted_text = extract_text_via_api(img_path)
         
-        if not extracted_text.strip():
-            extracted_text = "រកមិនឃើញអក្សរច្បាស់លាស់នៅក្នុងវីដេអូនេះទេ។"
+        if not extracted_text:
+            extracted_text = "រកមិនឃើញអក្សរច្បាស់លាស់នៅក្នុងវីដេអូនេះទេ។ (សូមព្យាយាមផ្ញើវីដេអូផ្សេងដែលអក្សរច្បាស់ជាង)"
             
         await message.reply_text(f"📄 **អក្សរដែលរកឃើញ៖**\n\n{extracted_text}")
         
