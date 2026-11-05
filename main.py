@@ -34,7 +34,12 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     video = message.video or message.document
     
     if not video:
-        await message.reply_text("សូមផ្ញើមកជាវីដេអូ ឬ Document ជាវីដេអូ!")
+        await message.reply_text("សូមផ្ញើមកជាវីដេអូ!")
+        return
+
+    # ឆែកទំហំវីដេអូ (Telegram កំណត់ត្រឹម 20MB សម្រាប់ Bot ទាញយក)
+    if video.file_size and video.file_size > 20 * 1024 * 1024:
+        await message.reply_text("⚠️ វីដេអូនេះធំពេក! សូមផ្ញើវីដេអូដែលមានទំហំតិចជាង 20MB (ឬវីដេអូខ្លីៗ)។")
         return
 
     await message.reply_text("⏳ កំពុងទាញយក និងអានអក្សរពីវីដេអូ សូមរង់ចាំបន្តិច...")
